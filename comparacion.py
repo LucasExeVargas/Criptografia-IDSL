@@ -1,202 +1,92 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from PIL import Image, ImageTk
-import hashlib
-import io
-import numpy as np
-from skimage.metrics import structural_similarity as ssim
+import cv2
+import imagehash
+from PIL import Image
+from typing import List, Dict, Union
 
-class VerificadorIntegridadImagenes(tk.Tk):
-    def __init__(self):
-        super().__init__()
+class ComparadorImagenes:
+    """
+    Clase para comparar imágenes usando pHash y ORB.
+    Permite comparar una imagen original con múltiples imágenes de prueba.
+    """
+    
+    def __init__(self, pathOriginal: str):
+        self.pathOriginal = pathOriginal
 
-        self.title("Verificador de Integridad de Imágenes")
-        self.geometry("800x600")
-        self.configure(bg="#f0f0f0")
+    def compare_pHash(self, pathsComparaciones: List[str], limite: int = 10) -> List[Dict[str, Union[str, int, bool]]]:
+        """
+        Compara imágenes usando pHash (Perceptual Hashing).
+        
+        El algoritmo pHash, o perceptual hash, es una técnica diseñada para obtener una "firma digital" que representa la apariencia visual de una imagen. Su funcionamiento se basa en transformar la imagen para extraer sus componentes más significativos. Para ello, se reduce la imagen a un tamaño pequeño y la convierte a escala de grises. Luego, aplica una Transformada Discreta del Coseno (DCT), que permite capturar las frecuencias principales de la imagen. A partir de los coeficientes más importantes de esta transformación, se calcula una mediana y genera un hash binario comparando cada valor con esa mediana. El resultado es una cadena binaria o hexadecimal que puede ser utilizada para comparar imágenes mediante una métrica como la distancia de Hamming (el número de posiciones en las que dos cadenas de igual longitud tienen símbolos diferentes). De esta forma, pHash permite detectar imágenes similares incluso si han sido redimensionadas, comprimidas o ligeramente modificadas.
+        
+        :param pathsComparaciones: Lista de rutas de imágenes a comparar con la imagen original.
+        :param limite: Límite de diferencia para considerar dos imágenes similares.
+        :return: Lista de diccionarios con resultados de comparación.
+        Cada diccionario contiene:
+            - "imagen": Ruta de la imagen comparada.
+            - "diferencia": Diferencia de pHash entre la imagen original y la comparada.
+            - "son_similares": Booleano indicando si la imagen es similar a la original.
+        """
+        original = Image.open(self.pathOriginal)
+        pHashOriginal = imagehash.phash(original)
+        resultados = []
 
-        self.ruta_imagen_referencia = None
-        self.ruta_imagen_prueba = None
-        self.hash_referencia = None
-        self.hash_prueba = None
+        for path in pathsComparaciones:
+            imagenTest = Image.open(path)
+            diferenciapHash = pHashOriginal - imagehash.phash(imagenTest)
+            resultados.append({
+                "imagen": path,
+                "diferencia": int(diferenciapHash),
+                "son_similares": diferenciapHash <= limite
+            })
+        return resultados
 
-        self.marco_principal = tk.Frame(self, bg="#f0f0f0")
-        self.marco_principal.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+    def compare_ORB(self, pathsComparaciones: List[str], limiteCaracteristicas: int = 500, saveOutput: bool = False, dirOutput: str = "resultados_ORB") -> List[Dict[str, Union[int, str]]]:
+        """
+        Compara imágenes usando ORB (Oriented FAST and Rotated BRIEF).
+        
+        El algoritmo ORB (Oriented FAST and Rotated BRIEF) trabaja con el objetivo es identificar puntos clave dentro de una imagen (regiones distintivas que pueden ser comparadas con otras imágenes para encontrar correspondencias). ORB comienza detectando estos puntos clave mediante el algoritmo FAST (un método extremadamente rápido que consiste en analizar un ixel y compararlo con los pixeles ubicados en un círculo a su alrededor), y luego les asigna una orientación para lograr invariancia a la rotación. Posteriormente, describe estos puntos usando una versión modificada de BRIEF (un descriptor binario eficiente y robusto). El resultado de ORB es un conjunto de puntos clave junto con descriptores binarios que pueden ser comparados entre imágenes para determinar coincidencias locales. En nuestro caso, retornamos imágenes donde se pueden ver las similitudes entre la imagen original y las imágenes comparadas, además de un conteo de coincidencias.
+        
+        :param pathsComparaciones: Lista de rutas de imágenes a comparar con la imagen original.
+        :param limiteCaracteristicas: Número máximo de características a detectar.
+        :param saveOutput: Si es True, guarda las imágenes con las coincidencias visualizadas.
+        :param dirOutput: Directorio donde se guardarán las imágenes de salida si saveOutput es True.
+        :return: Lista de diccionarios con resultados de comparación.
+        Cada diccionario contiene:
+            - "imagen": Ruta de la imagen comparada.
+            - "coincidencias": Número de coincidencias encontradas.
+            - "pathOutput": Ruta del archivo guardado si saveOutput es True, de lo contrario None.
+        """
+        imagenOriginal = cv2.imread(self.pathOriginal, cv2.IMREAD_GRAYSCALE)
+        orb = cv2.ORB_create(limiteCaracteristicas)
+        kp1, des1 = orb.detectAndCompute(imagenOriginal, None)
+        results = []
 
-        self.marco_ref = tk.LabelFrame(self.marco_principal, text="Imagen de Referencia", bg="#f0f0f0", font=("Arial", 12))
-        self.marco_ref.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        if saveOutput:
+            import os
+            os.makedirs(dirOutput, exist_ok=True)
 
-        self.marco_prueba = tk.LabelFrame(self.marco_principal, text="Imagen de Prueba", bg="#f0f0f0", font=("Arial", 12))
-        self.marco_prueba.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+        for path in pathsComparaciones:
+            imagenTest = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+            kp2, des2 = orb.detectAndCompute(imagenTest, None)
 
-        self.marco_principal.grid_columnconfigure(0, weight=1)
-        self.marco_principal.grid_columnconfigure(1, weight=1)
-        self.marco_principal.grid_rowconfigure(0, weight=1)
-        self.marco_principal.grid_rowconfigure(1, weight=0)
+            # Analizamos las coincidencias entre las características detectadas
+            bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+            coincidencias = bf.match(des1, des2)
+            coincidencias = sorted(coincidencias, key=lambda x: x.distance)
 
-        self.etiqueta_imagen_ref = tk.Label(self.marco_ref, bg="white", width=40, height=15)
-        self.etiqueta_imagen_ref.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-        self.etiqueta_imagen_prueba = tk.Label(self.marco_prueba, bg="white", width=40, height=15)
-        self.etiqueta_imagen_prueba.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-        self.marco_botones = tk.Frame(self.marco_principal, bg="#f0f0f0")
-        self.marco_botones.grid(row=1, column=0, columnspan=2, pady=10)
-
-        self.boton_cargar_ref = tk.Button(
-            self.marco_botones,
-            text="Cargar Imagen de Referencia",
-            command=self.cargar_imagen_referencia,
-            bg="#4CAF50",
-            fg="white",
-            font=("Arial", 10, "bold"),
-            padx=10,
-            pady=5
-        )
-        self.boton_cargar_ref.grid(row=0, column=0, padx=10)
-
-        self.boton_cargar_prueba = tk.Button(
-            self.marco_botones,
-            text="Cargar Imagen de Prueba",
-            command=self.cargar_imagen_prueba,
-            bg="#2196F3",
-            fg="white",
-            font=("Arial", 10, "bold"),
-            padx=10,
-            pady=5
-        )
-        self.boton_cargar_prueba.grid(row=0, column=1, padx=10)
-
-        self.boton_verificar = tk.Button(
-            self.marco_botones,
-            text="Verificar Integridad",
-            command=self.verificar_integridad,
-            bg="#FF9800",
-            fg="white",
-            font=("Arial", 10, "bold"),
-            padx=10,
-            pady=5
-        )
-        self.boton_verificar.grid(row=0, column=2, padx=10)
-
-        self.marco_resultados = tk.LabelFrame(self.marco_principal, text="Resultado de Verificación", bg="#f0f0f0", font=("Arial", 12))
-        self.marco_resultados.grid(row=2, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
-
-        self.etiqueta_resultado = tk.Label(
-            self.marco_resultados,
-            text="Cargue ambas imágenes y haga clic en 'Verificar Integridad'",
-            bg="#f0f0f0",
-            font=("Arial", 12),
-            padx=10,
-            pady=10
-        )
-        self.etiqueta_resultado.pack(fill=tk.X)
-
-        self.marco_hash = tk.Frame(self.marco_principal, bg="#f0f0f0")
-        self.marco_hash.grid(row=3, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
-
-        self.etiqueta_hash_ref = tk.Label(self.marco_hash, text="Hash de Referencia: Ninguno", bg="#f0f0f0", font=("Courier", 10))
-        self.etiqueta_hash_ref.pack(anchor="w")
-
-        self.etiqueta_hash_prueba = tk.Label(self.marco_hash, text="Hash de Prueba: Ninguno", bg="#f0f0f0", font=("Courier", 10))
-        self.etiqueta_hash_prueba.pack(anchor="w")
-
-    def cargar_imagen_referencia(self):
-        ruta_archivo = filedialog.askopenfilename(
-            title="Seleccionar Imagen de Referencia",
-            filetypes=[("Archivos de imagen", "*.png *.jpg *.jpeg *.bmp *.gif")]
-        )
-        if ruta_archivo:
-            self.ruta_imagen_referencia = ruta_archivo
-            self.mostrar_imagen(ruta_archivo, self.etiqueta_imagen_ref)
-            self.hash_referencia = self.calcular_hash_imagen(ruta_archivo)
-            self.etiqueta_hash_ref.config(text=f"Hash de Referencia: {self.hash_referencia[:16]}...")
-            self.etiqueta_resultado.config(text="Cargue ambas imágenes y haga clic en 'Verificar Integridad'")
-
-    def cargar_imagen_prueba(self):
-        ruta_archivo = filedialog.askopenfilename(
-            title="Seleccionar Imagen de Prueba",
-            filetypes=[("Archivos de imagen", "*.png *.jpg *.jpeg *.bmp *.gif")]
-        )
-        if ruta_archivo:
-            self.ruta_imagen_prueba = ruta_archivo
-            self.mostrar_imagen(ruta_archivo, self.etiqueta_imagen_prueba)
-            self.hash_prueba = self.calcular_hash_imagen(ruta_archivo)
-            self.etiqueta_hash_prueba.config(text=f"Hash de Prueba: {self.hash_prueba[:16]}...")
-            self.etiqueta_resultado.config(text="Cargue ambas imágenes y haga clic en 'Verificar Integridad'")
-
-    def mostrar_imagen(self, ruta_archivo, etiqueta):
-        try:
-            imagen = Image.open(ruta_archivo)
-            ancho_etiqueta = etiqueta.winfo_width() or 300
-            alto_etiqueta = etiqueta.winfo_height() or 200
-            ancho_img, alto_img = imagen.size
-            ratio = min(ancho_etiqueta / ancho_img, alto_etiqueta / alto_img)
-            nuevo_ancho = int(ancho_img * ratio)
-            nuevo_alto = int(alto_img * ratio)
-            imagen = imagen.resize((nuevo_ancho, nuevo_alto), Image.LANCZOS)
-            foto = ImageTk.PhotoImage(imagen)
-            etiqueta.config(image=foto)
-            etiqueta.image = foto
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al cargar la imagen: {str(e)}")
-
-    def calcular_hash_imagen(self, ruta_archivo):
-        try:
-            with Image.open(ruta_archivo) as img:
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                buffer_bytes_img = io.BytesIO()
-                img.save(buffer_bytes_img, format='PNG')
-                bytes_img = buffer_bytes_img.getvalue()
-                objeto_hash = hashlib.sha256(bytes_img)
-                return objeto_hash.hexdigest()
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al calcular el hash: {str(e)}")
-            return None
-
-    def comparar_similitud_visual(self, ruta1, ruta2):
-        try:
-            img1 = Image.open(ruta1).convert('L')
-            img2 = Image.open(ruta2).convert('L')
-            img2 = img2.resize(img1.size, Image.LANCZOS)
-            arr1 = np.array(img1)
-            arr2 = np.array(img2)
-            score, _ = ssim(arr1, arr2, full=True)
-            return score
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al comparar imágenes: {str(e)}")
-            return None
-
-    def verificar_integridad(self):
-        if not self.ruta_imagen_referencia or not self.ruta_imagen_prueba:
-            messagebox.showwarning("Advertencia", "Por favor, cargue ambas imágenes primero.")
-            return
-
-        if self.hash_referencia == self.hash_prueba:
-            self.etiqueta_resultado.config(
-                text="✅ IMÁGENES IDÉNTICAS (hashes coinciden)",
-                fg="green",
-                font=("Arial", 14, "bold")
-            )
-        else:
-            score = self.comparar_similitud_visual(self.ruta_imagen_referencia, self.ruta_imagen_prueba)
-            if score is not None:
-                if score > 0.95:
-                    texto = f"🟡 Muy similares visualmente (SSIM={score:.2f})"
-                    color = "orange"
-                elif score > 0.75:
-                    texto = f"🟠 Similares, pero con diferencias (SSIM={score:.2f})"
-                    color = "darkorange"
-                else:
-                    texto = f"❌ Diferentes visualmente (SSIM={score:.2f})"
-                    color = "red"
-
-                self.etiqueta_resultado.config(
-                    text=texto,
-                    fg=color,
-                    font=("Arial", 14, "bold")
+            # Guardamos la imagen con las coincidencias dibujadas si saveOutput es True
+            pathOutput = None
+            if saveOutput:
+                pathOutput = f"{dirOutput}/diferencia_orb_{os.path.basename(path)}"
+                imagenConComparaciones = cv2.drawMatches(
+                    imagenOriginal, kp1, imagenTest, kp2, coincidencias[:50], None,
+                    flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
                 )
+                cv2.imwrite(pathOutput, imagenConComparaciones)
 
-if __name__ == "__main__":
-    app = VerificadorIntegridadImagenes()
-    app.mainloop()
+            results.append({
+                "imagen": path,
+                "coincidencias": len(coincidencias),
+                "pathOutput": pathOutput
+            })
+        return results

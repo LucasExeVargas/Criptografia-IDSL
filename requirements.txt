@@ -1,0 +1,5 @@
+ImageHash==4.3.2
+numpy==2.3.0
+opencv_python==4.11.0.86
+Pillow==11.2.1
+skimage==0.0
