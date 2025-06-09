@@ -33,6 +33,8 @@ class ComparadorImagenes:
         for path in pathsComparaciones:
             imagenTest = Image.open(path)
             diferenciapHash = pHashOriginal - imagehash.phash(imagenTest)
+            print(f"HASH DE LA IMAGEN ORIGINAL: {pHashOriginal}")
+            print(f"HASH DE LA IMAGEN COMPARADA: {imagehash.phash(imagenTest)}")
             resultados.append({
                 "imagen": path,
                 "diferencia": int(diferenciapHash),
@@ -40,7 +42,7 @@ class ComparadorImagenes:
             })
         return resultados
 
-    def compare_ORB(self, pathsComparaciones: List[str], limiteCaracteristicas: int = 500, saveOutput: bool = False, dirOutput: str = "resultados_ORB") -> List[Dict[str, Union[int, str]]]:
+    def compare_ORB(self, pathsComparaciones: List[str], limiteCaracteristicas: int = 50000, saveOutput: bool = False, dirOutput: str = "resultados_ORB") -> List[Dict[str, Union[int, str]]]:
         """
         Compara imágenes usando ORB (Oriented FAST and Rotated BRIEF).
         
@@ -79,7 +81,7 @@ class ComparadorImagenes:
             if saveOutput:
                 pathOutput = f"{dirOutput}/diferencia_orb_{os.path.basename(path)}"
                 imagenConComparaciones = cv2.drawMatches(
-                    imagenOriginal, kp1, imagenTest, kp2, coincidencias[:50], None,
+                    imagenOriginal, kp1, imagenTest, kp2, coincidencias[:limiteCaracteristicas], None,
                     flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
                 )
                 cv2.imwrite(pathOutput, imagenConComparaciones)
