@@ -1,3 +1,5 @@
+import os
+from datetime import datetime 
 import cv2
 import imagehash
 from PIL import Image
@@ -25,6 +27,7 @@ class ComparadorImagenes:
             - "imagen": Ruta de la imagen comparada.
             - "diferencia": Diferencia de pHash entre la imagen original y la comparada.
             - "son_similares": Booleano indicando si la imagen es similar a la original.
+            - "fecha_modificacion": Indica la ultima vez que se modifico el archivo
         """
         original = Image.open(self.pathOriginal)
         pHashOriginal = imagehash.phash(original)
@@ -35,9 +38,12 @@ class ComparadorImagenes:
             diferenciapHash = pHashOriginal - imagehash.phash(imagenTest)
             print(f"HASH DE LA IMAGEN ORIGINAL: {pHashOriginal}")
             print(f"HASH DE LA IMAGEN COMPARADA: {imagehash.phash(imagenTest)}")
+            timeStamp = os.path.getmtime(path)
+            fechaMod = datetime.fromtimestamp(timeStamp).strftime("%Y-%m-%d %H:%M:%S")
             resultados.append({
                 "imagen": path,
                 "diferencia": int(diferenciapHash),
+                "fecha_modificacion": fechaMod,
                 "son_similares": diferenciapHash <= limite
             })
         return resultados
@@ -85,10 +91,58 @@ class ComparadorImagenes:
                     flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
                 )
                 cv2.imwrite(pathOutput, imagenConComparaciones)
+            #Obtenemos los datos de la ultima modificacion
+            timeStamp = os.path.getmtime(path)
+            fechaMod = datetime.fromtimestamp(timeStamp).strftime("%Y-%m-%d %H:%M:%S")
+            coincidencias_total = len(coincidencias)
+            porcentaje_coincidencias = round((coincidencias_total / limiteCaracteristicas) * 100, 2)
 
             results.append({
                 "imagen": path,
-                "coincidencias": len(coincidencias),
+                "coincidencias": f"{coincidencias_total}/{limiteCaracteristicas}",
+                "porcentaje_coincidencias":  f"{porcentaje_coincidencias}%",
+                "fecha_modificacion": fechaMod,
                 "pathOutput": pathOutput
             })
         return results
+    
+    #Compara el color de las imagenes, obtiene el histograma de cada imagen donde ve cuántos píxeles hay de cada color o intensidad
+    def compare_histogramas(self, pathsComparaciones: List[str], metodo=cv2.HISTCMP_CORREL, umbral: float = 0.8) -> List[Dict[str, Union[str, float, bool]]]:
+        """"
+        Compara imágenes usando histogramas de color (en espacio HSV).
+        :param pathsComparaciones: Lista de rutas de imágenes a comparar con la imagen original.
+        :param metodo: Método de comparación (ej: cv2.HISTCMP_CORREL, cv2.HISTCMP_CHISQR, etc.)
+        :param umbral: Valor mínimo para considerar que las imágenes son similares.
+        :return: Lista de diccionarios con los resultados.
+        """
+        resultados = []
+
+        # Cargar y convertir imagen original
+        imgOriginal = cv2.imread(self.pathOriginal)
+        hsvOriginal = cv2.cvtColor(imgOriginal, cv2.COLOR_BGR2HSV)
+        histOriginal = cv2.calcHist([hsvOriginal], [0, 1], None, [50, 60], [0, 180, 0, 256])
+        cv2.normalize(histOriginal, histOriginal, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
+
+        for path in pathsComparaciones:
+            img = cv2.imread(path)
+            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            hist = cv2.calcHist([hsv], [0, 1], None, [50, 60], [0, 180, 0, 256])
+            cv2.normalize(hist, hist, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
+
+            similitud = cv2.compareHist(histOriginal, hist, metodo)
+
+            es_similar = False
+            if metodo == cv2.HISTCMP_CORREL:
+                es_similar = similitud >= umbral
+            elif metodo in [cv2.HISTCMP_CHISQR, cv2.HISTCMP_BHATTACHARYYA]:
+                es_similar = similitud <= umbral
+            elif metodo == cv2.HISTCMP_INTERSECT:
+                es_similar = similitud >= umbral  # A mayor intersección, más parecido
+
+            resultados.append({
+                "imagen": path,
+                "similitud": round(similitud, 4), #1.0 identicas,0.8-0.99 muy similiares,  0.5-0.9 parecidas, <0.5 distintas
+                "son_similares": es_similar  
+            })
+
+        return resultados
