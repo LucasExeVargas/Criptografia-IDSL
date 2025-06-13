@@ -8,7 +8,7 @@ import hashlib
 from comparacion import ComparadorImagenes
 
 
-class ModernButton(tk.Canvas):
+class Button(tk.Canvas):
     def __init__(self, parent, text, command=None, bg_color="#7289DA", hover_color="#5B6EAE", 
                  text_color="white", width=120, height=40, corner_radius=8):
         super().__init__(parent, width=width, height=height, highlightthickness=0)
@@ -56,7 +56,7 @@ class ModernButton(tk.Canvas):
     def on_leave(self, event):
         self.draw_button(self.bg_color)
 
-class ModernFrame(tk.Frame):
+class Frame(tk.Frame):
     def __init__(self, parent, bg_color="#23272A", border_color="#99AAB5", corner_radius=12, **kwargs):
         super().__init__(parent, bg=bg_color, **kwargs)
         self.bg_color = bg_color
@@ -68,8 +68,7 @@ class ImageHashComparator:
         self.root = tk.Tk()
         self.root.title("Comparador de Imagenes")
         self.root.geometry("1000x800")
-        icon_img = PhotoImage(file="/home/lucas/proyecto/web/Criptografia-IDSL/ico.png")
-        self.root.iconphoto(True, icon_img)
+      
 
 
         self.root.configure(bg="#2C2F33")
@@ -117,7 +116,7 @@ class ImageHashComparator:
         
         self.algorithm_var = tk.StringVar(value="ORB")
         algorithm_combo = ttk.Combobox(algo_frame, textvariable=self.algorithm_var,
-                                     values=["ORB", "pHash"],
+                                     values=["ORB", "pHash", "histograma"],
                                      style="Modern.TCombobox",
                                      state="readonly", width=20)
         algorithm_combo.pack()
@@ -146,7 +145,7 @@ class ImageHashComparator:
         nav_frame = tk.Frame(bottom_frame, bg="#2C2F33")
         nav_frame.pack(pady=(0, 20))
         
-        self.prev_btn = ModernButton(nav_frame, "anterior", self.prev_image, 
+        self.prev_btn = Button(nav_frame, "anterior", self.prev_image, 
                                    bg_color="#99AAB5", hover_color="#7289DA", width=80, height=35)
         self.prev_btn.pack(side="left", padx=5)
         
@@ -154,12 +153,12 @@ class ImageHashComparator:
                                   font=("Segoe UI", 10), bg="#2C2F33", fg="#FFFFFF")
         self.page_label.pack(side="left", padx=20)
         
-        self.next_btn = ModernButton(nav_frame, "siguiente", self.next_image,
+        self.next_btn = Button(nav_frame, "siguiente", self.next_image,
                                    bg_color="#99AAB5", hover_color="#7289DA", width=80, height=35)
         self.next_btn.pack(side="left", padx=5)
         
         # Compare button
-        compare_btn = ModernButton(bottom_frame, "COMPARAR", self.compare_images_hash,
+        compare_btn = Button(bottom_frame, "COMPARAR", self.compare_images_hash,
                                  bg_color="#43B581", hover_color="#3CA374", 
                                  width=200, height=50, corner_radius=10)
         compare_btn.pack()
@@ -167,7 +166,7 @@ class ImageHashComparator:
         self.update_navigation()
         
     def create_original_image_section(self, parent):
-        section_frame = ModernFrame(parent, bg_color="#23272A", relief="solid", bd=1)
+        section_frame = Frame(parent, bg_color="#23272A", relief="solid", bd=1)
         
         title_label = tk.Label(section_frame, text="Imagen original", 
                               font=("Segoe UI", 12, "bold"), 
@@ -196,7 +195,7 @@ class ImageHashComparator:
         return section_frame
     
     def create_compare_image_section(self, parent):
-        section_frame = ModernFrame(parent, bg_color="#23272A", relief="solid", bd=1)
+        section_frame = Frame(parent, bg_color="#23272A", relief="solid", bd=1)
         
         title_label = tk.Label(section_frame, text="Imágenes a comparar", 
                               font=("Segoe UI", 12, "bold"), 
@@ -341,9 +340,9 @@ class ImageHashComparator:
         except Exception as e:
             return f"Error: {str(e)}"
 
-    def formatear_resultados(self, resultados: list[dict]) -> str:
+    def format_results(self, resultados: list[dict]) -> str:
         """
-        Recibe una lista de resultados de comparación (pHash o ORB) y devuelve un string formateado.
+        Recibe una lista de resultados de comparación (pHash, ORB o Histograma) y devuelve un string formateado.
         """
         if not resultados:
             return "⚠️ No se encontraron resultados para mostrar."
@@ -356,7 +355,7 @@ class ImageHashComparator:
             texto += f"🖼️ Imagen {self.current_compare_index +1}:\n"
             texto += f"   📍 Ruta: {imagen}\n"
 
-            # Detectar tipo de resultado: pHash o ORB
+            # Detectar tipo de resultado: pHash, ORB o Histograma
             if 'diferencia' in resultado:  # Caso pHash
                 diferencia = resultado.get('diferencia', 'N/A')
                 son_similares = resultado.get('son_similares', False)
@@ -370,12 +369,20 @@ class ImageHashComparator:
                 texto += f"   🔍 Coincidencias ORB: {coincidencias}\n"
                 texto += f"   💾 Imagen comparada guardada en: {self.path_output}\n"
 
+            elif 'similitud' in resultado:  # Caso Histograma
+                similitud = resultado.get('similitud', 'N/A')
+                son_similares = resultado.get('son_similares', False)
+                estado = "✅ Similares" if son_similares else "❌ Diferentes"
+                texto += f"   🔍 Similitud Histograma: {similitud}\n"
+                texto += f"   📌 Resultado: {estado}\n"
+
             else:
                 texto += "   ⚠️ Formato de resultado desconocido.\n"
 
             texto += "-" * 60 + "\n"
 
         return texto
+
 
 
     def compare_images_hash(self):
@@ -392,6 +399,8 @@ class ImageHashComparator:
             results = comparator.compare_ORB([self.compare_images[self.current_compare_index]], saveOutput=True)
         if algorithm == "pHash":
             results = comparator.compare_pHash([self.compare_images[self.current_compare_index]])
+        if algorithm == "histograma":
+            results = comparator.compare_histogramas([self.compare_images[self.current_compare_index]])
 
         self.show_results_window(self.formatear_resultados(results))
 
