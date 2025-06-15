@@ -26,6 +26,8 @@ class Button(tk.Canvas):
         self.bind("<Enter>", self.on_enter)
         self.bind("<Leave>", self.on_leave)
         
+        self.config(cursor="hand2")
+        
     def draw_button(self, color=None):
         self.delete("all")
         if color is None:
@@ -116,10 +118,12 @@ class ImageHashComparator:
         
         self.algorithm_var = tk.StringVar(value="ORB")
         algorithm_combo = ttk.Combobox(algo_frame, textvariable=self.algorithm_var,
-                                     values=["ORB", "pHash", "histograma"],
+                                     values=["ORB", "pHash", "Histograma"],
                                      style="Modern.TCombobox",
                                      state="readonly", width=20)
         algorithm_combo.pack()
+        
+        algorithm_combo.config(cursor="hand2")
         
         # Content frame
         content_frame = tk.Frame(main_container, bg="#2C2F33")
@@ -145,7 +149,7 @@ class ImageHashComparator:
         nav_frame = tk.Frame(bottom_frame, bg="#2C2F33")
         nav_frame.pack(pady=(0, 20))
         
-        self.prev_btn = Button(nav_frame, "anterior", self.prev_image, 
+        self.prev_btn = Button(nav_frame, "Anterior", self.prev_image, 
                                    bg_color="#99AAB5", hover_color="#7289DA", width=80, height=35)
         self.prev_btn.pack(side="left", padx=5)
         
@@ -153,12 +157,12 @@ class ImageHashComparator:
                                   font=("Segoe UI", 10), bg="#2C2F33", fg="#FFFFFF")
         self.page_label.pack(side="left", padx=20)
         
-        self.next_btn = Button(nav_frame, "siguiente", self.next_image,
+        self.next_btn = Button(nav_frame, "Siguiente", self.next_image,
                                    bg_color="#99AAB5", hover_color="#7289DA", width=80, height=35)
         self.next_btn.pack(side="left", padx=5)
         
         # Compare button
-        compare_btn = Button(bottom_frame, "COMPARAR", self.compare_images_hash,
+        compare_btn = Button(bottom_frame, "COMPARAR", self.comparar_imagenes_hash,
                                  bg_color="#43B581", hover_color="#3CA374", 
                                  width=200, height=50, corner_radius=10)
         compare_btn.pack()
@@ -175,6 +179,7 @@ class ImageHashComparator:
         
         # Frame para la imagen
         image_frame = tk.Frame(section_frame, bg="#2C2F33", relief="solid", bd=1)
+        image_frame.config(cursor="hand2")
         image_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         
         # Label para mostrar la imagen
@@ -204,6 +209,7 @@ class ImageHashComparator:
         
         # Frame para la imagen
         image_frame = tk.Frame(section_frame, bg="#2C2F33", relief="solid", bd=1)
+        image_frame.config(cursor="hand2")
         image_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         
         # Label para mostrar la imagen
@@ -359,15 +365,25 @@ class ImageHashComparator:
             if 'diferencia' in resultado:  # Caso pHash
                 diferencia = resultado.get('diferencia', 'N/A')
                 son_similares = resultado.get('son_similares', False)
+                hash_original = resultado.get('hash_original', 'N/A')
+                hash_comparada = resultado.get('hash_comparada', 'N/A')
                 estado = "✅ Similares" if son_similares else "❌ Diferentes"
+                texto += f"   #️⃣ Hash de imagen original: {hash_original}\n"
+                texto += f"   #️⃣ Hash de imagen comparada: {hash_comparada}\n"
                 texto += f"   🔍 Diferencia pHash: {diferencia}\n"
                 texto += f"   📌 Resultado: {estado}\n"
 
             elif 'coincidencias' in resultado:  # Caso ORB
                 coincidencias = resultado.get('coincidencias', 'N/A')
-                self.path_output = resultado.get('pathOutput', 'No disponible')
-                texto += f"   🔍 Coincidencias ORB: {coincidencias}\n"
-                texto += f"   💾 Imagen comparada guardada en: {self.path_output}\n"
+                kp1 = resultado.get('total_keypoints_original', 'N/A')
+                kp2 = resultado.get('total_keypoints_comparada', 'N/A')
+                porcentaje = resultado.get('porcentaje_coincidencias', 'N/A')
+                path_output = resultado.get('pathOutput', 'No disponible')
+                self.path_output = path_output
+
+                texto += f"   🔍 Coincidencias ORB: {coincidencias} / {min(kp1, kp2)}\n"
+                texto += f"   🎯 Porcentaje coincidencias: {porcentaje}\n"
+                texto += f"   💾 Imagen comparada guardada en: {path_output}\n"
 
             elif 'similitud' in resultado:  # Caso Histograma
                 similitud = resultado.get('similitud', 'N/A')
@@ -383,28 +399,127 @@ class ImageHashComparator:
 
         return texto
 
-
-
-    def compare_images_hash(self):
+    def comparar_imagenes_hash(self):
         if not self.original_image:
             messagebox.showerror("Error", "¡Primero cargue una imagen original!")
             return
         if not self.compare_images:
             messagebox.showerror("Error", "¡Cargue imágenes para comparar!")
             return
-        algorithm = self.algorithm_var.get()
-        comparator = ComparadorImagenes(self.original_image)
+    
+        # Disable all widgets and set wait cursor
+        self._set_procesamiento(True)
+        # Programar la comparación para ejecutarse después de un breve retraso
+        self.root.after(100, self._comparar_after)
+        
+    def _comparar_after(self):
+        try:
+            algorithm = self.algorithm_var.get()
+            comparator = ComparadorImagenes(self.original_image)
+            current_image = self.compare_images[self.current_compare_index]
+            
+            if algorithm == "ORB":
+                results = comparator.compare_ORB([current_image], saveOutput=True)
+            elif algorithm == "pHash":
+                results = comparator.compare_pHash([current_image])
+            elif algorithm == "Histograma":
+                results = comparator.compare_histogramas([current_image])
+            else:
+                raise ValueError("Algoritmo no reconocido")
+            
+            # Pasar los resultados directamente
+            self.root.after(0, self._mostrar_resultados_reinicia_cursor, results)
+        except Exception as e:
+            # Pasar el mensaje de error directamente
+            self.root.after(0, self._manejar_error_reinicia_cursor, str(e))
 
-        if algorithm == "ORB":
-            results = comparator.compare_ORB([self.compare_images[self.current_compare_index]], saveOutput=True)
-        if algorithm == "pHash":
-            results = comparator.compare_pHash([self.compare_images[self.current_compare_index]])
-        if algorithm == "histograma":
-            results = comparator.compare_histogramas([self.compare_images[self.current_compare_index]])
+    def _set_procesamiento(self, processing):
+        """Gestiona el estado de procesamiento (cursor, estado de widgets)"""
+        if processing:
+            # 1. Guardar cursores originales
+            self._original_cursors = {}
+            self._guardar_cursores(self.root)
+            
+            # 2. Deshabilitar todos los widgets (excepto la ventana principal)
+            self._deshabilitar_widgets(self.root)
+            
+            # 3. Cambiar cursor a "wait"
+            self._set_cursores_recursivo(self.root, "wait")
+            self.root.config(cursor="wait")
+        else:
+            # 1. Habilitar todos los widgets
+            self._habilitar_widgets(self.root)
+            
+            # 2. Restaurar cursores originales
+            self._restablecer_cursores(self.root)
+            self.root.config(cursor="")
 
-        self.show_results_window(self.formatear_resultados(results))
+    def _guardar_cursores(self, widget):
+        """Guarda los cursores originales de todos los widgets"""
+        try:
+            self._original_cursors[widget] = widget.cget("cursor")
+        except:
+            pass
+        
+        for child in widget.winfo_children():
+            self._guardar_cursores(child)
 
+    def _restablecer_cursores(self, widget):
+        """Restaura los cursores originales"""
+        if widget in self._original_cursors:
+            try:
+                widget.config(cursor=self._original_cursors[widget])
+            except:
+                pass
+        
+        for child in widget.winfo_children():
+            self._restablecer_cursores(child)
 
+    def _set_cursores_recursivo(self, widget, cursor):
+        """Establece un cursor recursivamente en todos los widgets"""
+        try:
+            widget.config(cursor=cursor)
+        except:
+            pass
+        
+        for child in widget.winfo_children():
+            self._set_cursores_recursivo(child, cursor)
+
+    def _deshabilitar_widgets(self, parent):
+        """Deshabilita recursivamente todos los widgets hijos"""
+        for child in parent.winfo_children():
+            try:
+                # Solo deshabilitar widgets que soporten state
+                if 'state' in child.keys():
+                    child.config(state='disabled')
+            except Exception as e:
+                print(f"No se pudo deshabilitar widget: {e}")
+            
+            # Procesar hijos recursivamente
+            if hasattr(child, 'winfo_children'):
+                self._deshabilitar_widgets(child)
+
+    def _habilitar_widgets(self, parent):
+        """Habilita recursivamente todos los widgets hijos"""
+        for child in parent.winfo_children():
+            try:
+                # Solo habilitar widgets que soporten state
+                if 'state' in child.keys():
+                    child.config(state='normal')
+            except Exception as e:
+                print(f"No se pudo habilitar widget: {e}")
+            
+            # Procesar hijos recursivamente
+            if hasattr(child, 'winfo_children'):
+                self._habilitar_widgets(child)
+
+    def _mostrar_resultados_reinicia_cursor(self, results):
+        self.show_results_window(self.format_results(results))
+        self._set_procesamiento(False)
+
+    def _manejar_error_reinicia_cursor(self, error_msg):
+        messagebox.showerror("Error", f"Ocurrió un error al comparar: {error_msg}")
+        self._set_procesamiento(False)
     
     def show_results_window(self, results_text):
         results_window = tk.Toplevel(self.root)
@@ -437,7 +552,7 @@ class ImageHashComparator:
             img_label = tk.Label(image_frame, image=img_tk, bg="#2C2F33")
             img_label.image = img_tk  # Previene garbage collection
             img_label.pack()
-   
+
     def run(self):
         self.root.mainloop()
 

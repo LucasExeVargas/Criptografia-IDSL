@@ -43,12 +43,14 @@ class ComparadorImagenes:
             resultados.append({
                 "imagen": path,
                 "diferencia": int(diferenciapHash),
+                "hash_original": str(pHashOriginal),
+                "hash_comparada": str(imagehash.phash(imagenTest)),
                 "fecha_modificacion": fechaMod,
                 "son_similares": diferenciapHash <= limite
             })
         return resultados
 
-    def compare_ORB(self, pathsComparaciones: List[str], limiteCaracteristicas: int = 50000, saveOutput: bool = False, dirOutput: str = "resultados_ORB") -> List[Dict[str, Union[int, str]]]:
+    def compare_ORB(self, pathsComparaciones: List[str], limiteCaracteristicas: int = 10000, saveOutput: bool = False, dirOutput: str = "resultados_ORB") -> List[Dict[str, Union[int, str]]]:
         """
         Compara imágenes usando ORB (Oriented FAST and Rotated BRIEF).
         
@@ -62,7 +64,11 @@ class ComparadorImagenes:
         Cada diccionario contiene:
             - "imagen": Ruta de la imagen comparada.
             - "coincidencias": Número de coincidencias encontradas.
-            - "pathOutput": Ruta del archivo guardado si saveOutput es True, de lo contrario None.
+            - "total_keypoints_original": Total de puntos clave en la imagen original.
+            - "total_keypoints_comparada": Total de puntos clave en la imagen comparada.
+            - "porcentaje_coincidencias": Porcentaje de coincidencias respecto al total de puntos clave.
+            - "fecha_modificacion": Indica la ultima vez que se modifico el archivo
+            - "pathOutput": Ruta donde se guardó la imagen con las coincidencias (si saveOutput es True).
         """
         imagenOriginal = cv2.imread(self.pathOriginal, cv2.IMREAD_GRAYSCALE)
         orb = cv2.ORB_create(limiteCaracteristicas)
@@ -95,12 +101,18 @@ class ComparadorImagenes:
             timeStamp = os.path.getmtime(path)
             fechaMod = datetime.fromtimestamp(timeStamp).strftime("%Y-%m-%d %H:%M:%S")
             coincidencias_total = len(coincidencias)
-            porcentaje_coincidencias = round((coincidencias_total / limiteCaracteristicas) * 100, 2)
+            # porcentaje_coincidencias = round((coincidencias_total / limiteCaracteristicas) * 100, 2)
+            total_kp1 = len(kp1)
+            total_kp2 = len(kp2)
+            total_kp = min(total_kp1, total_kp2)
+            porcentaje_coincidencias = round((coincidencias_total / total_kp) * 100, 2) if total_kp > 0 else 0
 
             results.append({
                 "imagen": path,
-                "coincidencias": f"{coincidencias_total}/{limiteCaracteristicas}",
-                "porcentaje_coincidencias":  f"{porcentaje_coincidencias}%",
+                "coincidencias": coincidencias_total,
+                "total_keypoints_original": total_kp1,
+                "total_keypoints_comparada": total_kp2,
+                "porcentaje_coincidencias": f"{porcentaje_coincidencias}%",
                 "fecha_modificacion": fechaMod,
                 "pathOutput": pathOutput
             })
@@ -114,6 +126,10 @@ class ComparadorImagenes:
         :param metodo: Método de comparación (ej: cv2.HISTCMP_CORREL, cv2.HISTCMP_CHISQR, etc.)
         :param umbral: Valor mínimo para considerar que las imágenes son similares.
         :return: Lista de diccionarios con los resultados.
+        Cada diccionario contiene:
+            - "imagen": Ruta de la imagen comparada.
+            - "similitud": Valor de similitud entre 0 y 1 (1.0: identicas, 0.8-0.99: muy similiares, 0.5-0.9: parecidas, < 0.5: distintas).
+            - "son_similares": Booleano indicando si la imagen es similar a la original según el umbral.
         """
         resultados = []
 
@@ -141,7 +157,7 @@ class ComparadorImagenes:
 
             resultados.append({
                 "imagen": path,
-                "similitud": round(similitud, 4), #1.0 identicas,0.8-0.99 muy similiares,  0.5-0.9 parecidas, <0.5 distintas
+                "similitud": round(similitud, 4), #1.0: identicas, 0.8-0.99: muy similiares, 0.5-0.9: parecidas, < 0.5: distintas
                 "son_similares": es_similar  
             })
 

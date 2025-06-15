@@ -1,4 +1,5 @@
 __pycache__/
+resultados_ORB/
 *.py[cod]
 venv/
 .env
