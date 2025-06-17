@@ -6,6 +6,7 @@ import os
 from PIL import Image, ImageTk
 import hashlib
 from comparacion import ComparadorImagenes
+import sys
 
 
 class Button(tk.Canvas):
@@ -330,22 +331,6 @@ class ImageHashComparator:
         else:
             self.page_label.config(text="0 de 0")
     
-    def get_image_hash(self, image_path, algorithm="MD5"):
-        hash_algorithms = {
-            "MD5": hashlib.md5(),
-            "SHA1": hashlib.sha1(),
-            "SHA256": hashlib.sha256(),
-            "SHA512": hashlib.sha512()
-        }
-        hasher = hash_algorithms.get(algorithm, hashlib.md5())
-        try:
-            with open(image_path, 'rb') as f:
-                for chunk in iter(lambda: f.read(4096), b""):
-                    hasher.update(chunk)
-            return hasher.hexdigest()
-        except Exception as e:
-            return f"Error: {str(e)}"
-
     def format_results(self, resultados: list[dict]) -> str:
         """
         Recibe una lista de resultados de comparación (pHash, ORB o Histograma) y devuelve un string formateado.
@@ -444,8 +429,12 @@ class ImageHashComparator:
             self._deshabilitar_widgets(self.root)
             
             # 3. Cambiar cursor a "wait"
-            self._set_cursores_recursivo(self.root, "wait")
-            self.root.config(cursor="wait")
+            if sys.platform.startswith('win'):
+                self._set_cursores_recursivo(self.root, "wait")
+                self.root.config(cursor="wait")
+            elif sys.platform.startswith('linux'):
+                self._set_cursores_recursivo(self.root, "watch")
+                self.root.config(cursor="watch")
         else:
             # 1. Habilitar todos los widgets
             self._habilitar_widgets(self.root)
