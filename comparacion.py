@@ -50,7 +50,7 @@ class ComparadorImagenes:
             })
         return resultados
 
-    def compare_ORB(self, pathsComparaciones: List[str], limiteCaracteristicas: int = 10000, saveOutput: bool = False, dirOutput: str = "resultados_ORB") -> List[Dict[str, Union[int, str]]]:
+    def compare_ORB(self, pathsComparaciones: List[str], limiteCaracteristicas: int = 1000, saveOutput: bool = False, dirOutput: str = "resultados_ORB") -> List[Dict[str, Union[int, str]]]:
         """
         Compara imágenes usando ORB (Oriented FAST and Rotated BRIEF).
         
@@ -93,7 +93,7 @@ class ComparadorImagenes:
             if saveOutput:
                 pathOutput = f"{dirOutput}/diferencia_orb_{os.path.basename(path)}"
                 imagenConComparaciones = cv2.drawMatches(
-                    imagenOriginal, kp1, imagenTest, kp2, coincidencias[:limiteCaracteristicas], None,
+                    imagenOriginal, kp1, imagenTest, kp2, coincidencias[:limiteCaracteristicas//10], None,
                     flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
                 )
                 cv2.imwrite(pathOutput, imagenConComparaciones)
