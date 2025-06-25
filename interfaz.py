@@ -230,7 +230,7 @@ class ImageHashComparator:
         
         return section_frame
     
-    def resize_image(self, image_path, max_width=300, max_height=200):
+    def resize_image(self, image_path, max_width=500, max_height=400):
         """Redimensiona una imagen manteniendo la proporción"""
         try:
             with Image.open(image_path) as img:
@@ -357,18 +357,21 @@ class ImageHashComparator:
                 texto += f"   #️⃣ Hash de imagen comparada: {hash_comparada}\n"
                 texto += f"   🔍 Diferencia pHash: {diferencia}\n"
                 texto += f"   📌 Resultado: {estado}\n"
-
+                
             elif 'coincidencias' in resultado:  # Caso ORB
                 coincidencias = resultado.get('coincidencias', 'N/A')
+                buenas = resultado.get('coincidencias_buenas', 'N/A')
                 kp1 = resultado.get('total_keypoints_original', 'N/A')
                 kp2 = resultado.get('total_keypoints_comparada', 'N/A')
                 porcentaje = resultado.get('porcentaje_coincidencias', 'N/A')
+                porcentaje_buenas = resultado.get('porcentaje_buenas', 'N/A')
                 path_output = resultado.get('pathOutput', 'No disponible')
                 self.path_output = path_output
 
-                texto += f"   🔍 Coincidencias ORB: {coincidencias} / {min(kp1, kp2)}\n"
-                texto += f"   🎯 Porcentaje coincidencias: {porcentaje}\n"
+                texto += f"   🔍 Coincidencias ORB: {coincidencias} totales, {buenas} buenas / {min(kp1, kp2)} puntos clave\n"
+                texto += f"   🎯 Porcentaje coincidencias: {porcentaje}, Buenas: {porcentaje_buenas}\n"
                 texto += f"   💾 Imagen comparada guardada en: {path_output}\n"
+                texto += f"   📌 *Nota: Una coincidencia es buena si el punto clave de una imagen realmente se corresponde con el punto clave de la otra.\n"
 
             elif 'similitud' in resultado:  # Caso Histograma
                 similitud = resultado.get('similitud', 'N/A')

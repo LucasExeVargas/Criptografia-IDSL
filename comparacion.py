@@ -3,6 +3,7 @@ from datetime import datetime
 import cv2
 import imagehash
 from PIL import Image
+import numpy as np
 from typing import List, Dict, Union
 
 class ComparadorImagenes:
@@ -76,43 +77,51 @@ class ComparadorImagenes:
         results = []
 
         if saveOutput:
-            import os
             os.makedirs(dirOutput, exist_ok=True)
 
         for path in pathsComparaciones:
             imagenTest = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
             kp2, des2 = orb.detectAndCompute(imagenTest, None)
 
-            # Analizamos las coincidencias entre las características detectadas
             bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
             coincidencias = bf.match(des1, des2)
             coincidencias = sorted(coincidencias, key=lambda x: x.distance)
 
-            # Guardamos la imagen con las coincidencias dibujadas si saveOutput es True
+            # Filtrado de coincidencias buenas (distancia menor a 1.5 * mediana)
+            distancias = [m.distance for m in coincidencias]
+            if distancias:
+                umbral = np.median(distancias) * 1.5
+                buenas_coincidencias = [m for m in coincidencias if m.distance < umbral]
+            else:
+                buenas_coincidencias = []
+
             pathOutput = None
             if saveOutput:
                 pathOutput = f"{dirOutput}/diferencia_orb_{os.path.basename(path)}"
                 imagenConComparaciones = cv2.drawMatches(
-                    imagenOriginal, kp1, imagenTest, kp2, coincidencias[:limiteCaracteristicas//10], None,
+                    imagenOriginal, kp1, imagenTest, kp2, buenas_coincidencias[:50], None,
                     flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
                 )
                 cv2.imwrite(pathOutput, imagenConComparaciones)
-            #Obtenemos los datos de la ultima modificacion
+
             timeStamp = os.path.getmtime(path)
             fechaMod = datetime.fromtimestamp(timeStamp).strftime("%Y-%m-%d %H:%M:%S")
-            coincidencias_total = len(coincidencias)
-            # porcentaje_coincidencias = round((coincidencias_total / limiteCaracteristicas) * 100, 2)
+
             total_kp1 = len(kp1)
             total_kp2 = len(kp2)
             total_kp = min(total_kp1, total_kp2)
-            porcentaje_coincidencias = round((coincidencias_total / total_kp) * 100, 2) if total_kp > 0 else 0
+
+            porcentaje_coincidencias = round((len(coincidencias) / total_kp) * 100, 2) if total_kp > 0 else 0
+            porcentaje_buenas = round((len(buenas_coincidencias) / total_kp) * 100, 2) if total_kp > 0 else 0
 
             results.append({
                 "imagen": path,
-                "coincidencias": coincidencias_total,
+                "coincidencias": len(coincidencias),
+                "coincidencias_buenas": len(buenas_coincidencias),
                 "total_keypoints_original": total_kp1,
                 "total_keypoints_comparada": total_kp2,
                 "porcentaje_coincidencias": f"{porcentaje_coincidencias}%",
+                "porcentaje_buenas": f"{porcentaje_buenas}%",
                 "fecha_modificacion": fechaMod,
                 "pathOutput": pathOutput
             })
