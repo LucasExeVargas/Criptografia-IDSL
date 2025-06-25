@@ -10,6 +10,4 @@ Este proyecto utiliza las siguientes librerías de terceros:
   Una copia de dicha licencia se encuentra en [`LICENSES/opencv-python-LICENSE.txt`](LICENSES/opencv-python-LICENSE.txt).
 
 - [`numpy`](https://github.com/numpy/numpy), licenciada bajo la [BSD 3-Clause License](https://opensource.org/licenses/BSD-3-Clause).  
-  Una copia de dicha licencia se encuentra en [`LICENSES/numpy-LICENSE.txt`](LICENSES/numpy-LICENSE.txt).
-
 Estas librerías se utilizan tal como se distribuyen, sin modificaciones, únicamente invocando sus funciones.
