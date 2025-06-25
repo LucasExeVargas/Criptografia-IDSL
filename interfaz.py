@@ -1,10 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-from tkinter import PhotoImage
-
 import os
 from PIL import Image, ImageTk
-import hashlib
 from comparacion import ComparadorImagenes
 import sys
 
